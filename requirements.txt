@@ -1,117 +1,14 @@
-# Core GUI Framework
-# tkinter ist bereits in Python enthalten, kein pip install nötig
-customtkinter==5.2.2
-CTkMessagebox==2.5
+# Core Dependencies
+pynput>=1.7.6
+opencv-python>=4.8.0
+pyzbar>=0.1.9
+python-dotenv>=1.0.0
+pyodbc>=5.0.0
 
-# Datenbank
-pyodbc==5.1.0
+# GUI und Bildverarbeitung
+Pillow>=10.0.0
+numpy>=1.24.0
 
-# RFID-Reader (HID-Modus)
-pynput==1.7.6
-pyserial==3.5  # Falls serieller Modus benötigt wird
-
-# QR-Code Scanner
-opencv-python==4.9.0.80
-pyzbar==0.1.9
-numpy==1.26.4
-Pillow==10.2.0
-
-# Utilities
-python-dotenv==1.0.1
-pytz==2024.1
-python-dateutil==2.9.0
-
-# Logging und Monitoring
-colorlog==6.8.2
-watchdog==4.0.0
-
-# Audio-Feedback (optional)
-# pygame==2.5.2  # Für Sound-Effekte
-
-# Development & Testing
-pytest==8.0.2
-pytest-cov==4.1.0
-pytest-mock==3.12.0
-black==24.2.0
-pylint==3.1.0
-flake8==7.0.0
-mypy==1.8.0
-
-# Dokumentation
-sphinx==7.2.6
-sphinx-rtd-theme==2.0.0
-
-# Performance Profiling (optional)
-# memory-profiler==0.61.0
-# line-profiler==4.1.2
-
-# Sicherheit
-cryptography==42.0.5  # Für verschlüsselte Konfiguration
-
-# Build & Distribution (optional)
-# pyinstaller==6.5.0  # Für .exe-Erstellung
-# cx_Freeze==6.15.16  # Alternative zu pyinstaller
-
-# Windows-spezifisch
-pywin32==306  # Windows-API Zugriff
-# WMI==1.5.1  # Windows Management Instrumentation
-
-# Netzwerk (falls Remote-DB)
-# sshtunnel==0.4.0  # SSH-Tunnel für sichere DB-Verbindung
-
-# Monitoring & Metriken (optional)
-# prometheus-client==0.20.0
-# psutil==5.9.8
-
-# Excel-Export (optional)
-# openpyxl==3.1.2
-# xlsxwriter==3.2.0
-
-# PDF-Export (optional)
-# reportlab==4.1.0
-# pypdf==4.1.0
-
-# Barcode-Generierung (optional)
-# python-barcode==0.15.1
-# qrcode==7.4.2
-
-# Email-Benachrichtigungen (optional)
-# yagmail==0.15.293
-
-# Scheduler (optional)
-# schedule==1.2.0
-# APScheduler==3.10.4
-
-# REST API Client (optional)
-# requests==2.31.0
-# httpx==0.27.0
-
-# Datenvalidierung
-# pydantic==2.6.3
-# marshmallow==3.21.1
-
-# CLI-Tools (optional)
-# click==8.1.7
-# typer==0.9.0
-
-# Konfigurationsmanagement
-# pyyaml==6.0.1
-# toml==0.10.2
-
-# Threading & Async (optional)
-# asyncio==3.4.3
-# concurrent-futures==3.1.1
-
-# Bildverarbeitung (erweitert)
-# scikit-image==0.22.0
-# imutils==0.5.4
-
-# Machine Learning (optional, für bessere QR-Erkennung)
-# torch==2.2.1
-# torchvision==0.17.1
-
-# Systemüberwachung
-# sentry-sdk==1.43.0  # Error tracking
-
-# Versionsverwaltung
-packaging==24.0
+# Optional für Tests
+pytest>=7.4.0
+pytest-cov>=4.1.0
