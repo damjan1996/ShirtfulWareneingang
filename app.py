@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
 """
-RFID & QR Scanner - Vereinfachte Multi-User Anwendung
-Mehrere Benutzer scannen parallel über das gleiche Gerät
+RFID & QR Scanner - Paralleles Multi-User System
+Alle Benutzer können parallel alle verfügbaren Scanner nutzen
 """
 
 import tkinter as tk
@@ -18,25 +18,30 @@ from models import User, Session, QrScan
 from utils import setup_logger, format_duration
 
 # Logger setup
-logger = setup_logger('SimpleApp', APP_CONFIG.get('LOG_LEVEL', 'INFO'))
+logger = setup_logger('ParallelApp', APP_CONFIG.get('LOG_LEVEL', 'INFO'))
 
 
-class SimpleMultiUserApp:
+class ParallelMultiUserApp:
     def __init__(self, root):
         self.root = root
-        self.root.title("Multi-User QR Scanner - Vereinfacht")
-        self.root.geometry("1000x700")
-        self.root.minsize(800, 500)
+        self.root.title("Paralleles Multi-User QR Scanner System")
+        self.root.geometry("1200x800")
+        self.root.minsize(1000, 600)
 
         # State
         self.active_sessions = {}  # {user_id: session_data}
-        self.current_user_id = None  # Wer bekommt aktuell QR-Codes
+        self.qr_assignment_mode = "round_robin"  # "round_robin", "manual", "last_rfid"
+        self.last_rfid_user = None
+        self.round_robin_index = 0
         self.total_scans_today = 0
 
         # Hardware
         self.hid_listener = HIDListener(self.on_rfid_scan)
-        self.qr_scanner = None
-        self.scanner_running = False
+        self.scanners = []  # Liste aller Scanner
+        self.scanning_active = False
+
+        # UI State
+        self.pending_qr_assignment = None
 
         # UI Setup
         self.setup_ui()
@@ -45,177 +50,295 @@ class SimpleMultiUserApp:
         self.auto_start()
 
     def setup_ui(self):
-        """Erstellt die vereinfachte Benutzeroberfläche"""
+        """Erstellt die Benutzeroberfläche für paralleles Scannen"""
         # Hauptcontainer
-        main_frame = ttk.Frame(self.root, padding="15")
+        main_frame = ttk.Frame(self.root, padding="10")
         main_frame.pack(fill=tk.BOTH, expand=True)
 
         # Header
         header_frame = ttk.Frame(main_frame)
-        header_frame.pack(fill=tk.X, pady=(0, 20))
+        header_frame.pack(fill=tk.X, pady=(0, 15))
 
-        title_label = ttk.Label(header_frame, text="Multi-User QR Scanner",
-                                font=('Arial', 20, 'bold'))
+        title_label = ttk.Label(header_frame, text="Paralleles Multi-User Scanner System",
+                                font=('Arial', 18, 'bold'))
         title_label.pack(side=tk.LEFT)
 
-        self.status_label = ttk.Label(header_frame, text="Bereit",
-                                      font=('Arial', 12), foreground='green')
-        self.status_label.pack(side=tk.RIGHT)
+        # Status und Einstellungen
+        settings_frame = ttk.Frame(header_frame)
+        settings_frame.pack(side=tk.RIGHT)
 
-        # Hauptbereich - 2 Spalten
+        ttk.Label(settings_frame, text="QR-Zuordnung:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 5))
+
+        self.assignment_var = tk.StringVar(value=self.qr_assignment_mode)
+        assignment_combo = ttk.Combobox(settings_frame, textvariable=self.assignment_var,
+                                        values=["round_robin", "manual", "last_rfid"],
+                                        state="readonly", width=12)
+        assignment_combo.pack(side=tk.LEFT, padx=(0, 10))
+        assignment_combo.bind('<<ComboboxSelected>>', self.on_assignment_mode_changed)
+
+        self.status_label = ttk.Label(settings_frame, text="System bereit",
+                                      font=('Arial', 11), foreground='green')
+        self.status_label.pack(side=tk.LEFT)
+
+        # Hauptbereich - 3 Spalten
         content_frame = ttk.Frame(main_frame)
         content_frame.pack(fill=tk.BOTH, expand=True)
 
-        # Linke Spalte - Aktive Benutzer
+        # Linke Spalte - Aktive Benutzer (40%)
         left_frame = ttk.LabelFrame(content_frame, text="Aktive Benutzer", padding="10")
-        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 10))
+        left_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=(0, 5))
 
-        # Aktueller Benutzer
-        current_frame = ttk.Frame(left_frame)
-        current_frame.pack(fill=tk.X, pady=(0, 15))
+        # Benutzer-Info
+        info_frame = ttk.Frame(left_frame)
+        info_frame.pack(fill=tk.X, pady=(0, 10))
 
-        ttk.Label(current_frame, text="Nächster QR-Code geht an:",
-                  font=('Arial', 11)).pack(anchor=tk.W)
+        self.users_count_label = ttk.Label(info_frame, text="Angemeldete Benutzer: 0",
+                                           font=('Arial', 12, 'bold'))
+        self.users_count_label.pack(anchor=tk.W)
 
-        self.current_user_label = ttk.Label(current_frame, text="Niemand - RFID berühren",
-                                            font=('Arial', 14, 'bold'), foreground='red')
-        self.current_user_label.pack(anchor=tk.W)
+        self.next_assignment_label = ttk.Label(info_frame, text="Nächster QR-Code: -",
+                                               font=('Arial', 11), foreground='blue')
+        self.next_assignment_label.pack(anchor=tk.W)
 
         # Benutzerliste
-        columns = ('Status', 'Name', 'Start', 'Dauer', 'Scans', 'user_id')
-        self.users_tree = ttk.Treeview(left_frame, columns=columns, height=12, show='headings',
-                                       displaycolumns=('Status', 'Name', 'Start', 'Dauer', 'Scans'))
+        columns = ('Name', 'Start', 'Dauer', 'Scans', 'Letzter Scan', 'user_id')
+        self.users_tree = ttk.Treeview(left_frame, columns=columns, height=15, show='headings',
+                                       displaycolumns=('Name', 'Start', 'Dauer', 'Scans', 'Letzter Scan'))
 
-        self.users_tree.heading('Status', text='Status')
         self.users_tree.heading('Name', text='Name')
         self.users_tree.heading('Start', text='Start')
         self.users_tree.heading('Dauer', text='Dauer')
         self.users_tree.heading('Scans', text='Scans')
+        self.users_tree.heading('Letzter Scan', text='Letzter Scan')
 
-        self.users_tree.column('Status', width=60)
         self.users_tree.column('Name', width=150)
         self.users_tree.column('Start', width=80)
         self.users_tree.column('Dauer', width=80)
         self.users_tree.column('Scans', width=60)
+        self.users_tree.column('Letzter Scan', width=120)
 
-        self.users_tree.pack(fill=tk.BOTH, expand=True)
+        self.users_tree.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
 
-        # Buttons
-        button_frame = ttk.Frame(left_frame)
-        button_frame.pack(fill=tk.X, pady=(10, 0))
+        # Benutzer-Buttons
+        user_buttons_frame = ttk.Frame(left_frame)
+        user_buttons_frame.pack(fill=tk.X)
 
-        ttk.Button(button_frame, text="Abmelden",
+        ttk.Button(user_buttons_frame, text="Ausgewählten abmelden",
                    command=self.logout_selected).pack(side=tk.LEFT, padx=(0, 10))
 
-        ttk.Button(button_frame, text="Ich bin dran!",
-                   command=self.set_selected_active).pack(side=tk.LEFT)
+        ttk.Button(user_buttons_frame, text="Alle abmelden",
+                   command=self.logout_all).pack(side=tk.LEFT)
 
-        # Rechte Spalte - Scanner
-        right_frame = ttk.LabelFrame(content_frame, text="QR Scanner", padding="10")
-        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True)
+        # Mittlere Spalte - Scanner Status (30%)
+        middle_frame = ttk.LabelFrame(content_frame, text="Scanner Status", padding="10")
+        middle_frame.pack(side=tk.LEFT, fill=tk.BOTH, expand=True, padx=5)
 
-        # Scanner Status
-        scanner_status_frame = ttk.Frame(right_frame)
-        scanner_status_frame.pack(fill=tk.X, pady=(0, 10))
+        # Scanner-Info
+        scanner_info_frame = ttk.Frame(middle_frame)
+        scanner_info_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.scanner_status_label = ttk.Label(scanner_status_frame, text="Scanner: Startet...",
-                                              font=('Arial', 11), foreground='orange')
-        self.scanner_status_label.pack(anchor=tk.W)
+        self.scanner_count_label = ttk.Label(scanner_info_frame, text="Verfügbare Scanner: 0",
+                                             font=('Arial', 12, 'bold'))
+        self.scanner_count_label.pack(anchor=tk.W)
 
-        # Video Bereich
-        self.video_frame = ttk.Frame(right_frame, relief=tk.SUNKEN, borderwidth=2)
-        self.video_frame.pack(fill=tk.BOTH, expand=True)
+        self.scanning_status_label = ttk.Label(scanner_info_frame, text="Scanner: Initialisierung...",
+                                               font=('Arial', 11))
+        self.scanning_status_label.pack(anchor=tk.W)
 
-        self.video_label = ttk.Label(self.video_frame, text="Scanner wird gestartet...",
-                                     font=('Arial', 12), anchor=tk.CENTER)
+        # Scanner-Liste
+        scanner_columns = ('Index', 'Status', 'Letzte Aktivität')
+        self.scanner_tree = ttk.Treeview(middle_frame, columns=scanner_columns, height=8, show='headings')
+
+        for col in scanner_columns:
+            self.scanner_tree.heading(col, text=col)
+            self.scanner_tree.column(col, width=100)
+
+        self.scanner_tree.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # Scanner-Buttons
+        scanner_buttons_frame = ttk.Frame(middle_frame)
+        scanner_buttons_frame.pack(fill=tk.X)
+
+        self.toggle_scanning_btn = ttk.Button(scanner_buttons_frame, text="Scanner starten",
+                                              command=self.toggle_scanning)
+        self.toggle_scanning_btn.pack(side=tk.LEFT, padx=(0, 10))
+
+        ttk.Button(scanner_buttons_frame, text="Scanner neu starten",
+                   command=self.restart_scanners).pack(side=tk.LEFT)
+
+        # Live Video Bereich
+        video_frame = ttk.LabelFrame(middle_frame, text="Live Video", padding="5")
+        video_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        self.video_label = ttk.Label(video_frame, text="Scanner wird gestartet...",
+                                     font=('Arial', 12), anchor=tk.CENTER, relief=tk.SUNKEN)
         self.video_label.pack(fill=tk.BOTH, expand=True)
 
-        # Scanner Control
-        control_frame = ttk.Frame(right_frame)
-        control_frame.pack(fill=tk.X, pady=(10, 0))
+        # Rechte Spalte - QR-Code Verwaltung (30%)
+        right_frame = ttk.LabelFrame(content_frame, text="QR-Code Verwaltung", padding="10")
+        right_frame.pack(side=tk.RIGHT, fill=tk.BOTH, expand=True, padx=(5, 0))
 
-        self.scan_button = ttk.Button(control_frame, text="Scanner startet...",
-                                      command=self.toggle_scanner, state='disabled')
-        self.scan_button.pack(side=tk.LEFT)
+        # QR-Statistics
+        stats_frame = ttk.Frame(right_frame)
+        stats_frame.pack(fill=tk.X, pady=(0, 10))
 
-        # Scan Info
-        self.scan_info_label = ttk.Label(control_frame, text="Heute: 0 Scans",
+        self.total_scans_label = ttk.Label(stats_frame, text="Heutige Scans: 0",
+                                           font=('Arial', 12, 'bold'))
+        self.total_scans_label.pack(anchor=tk.W)
+
+        self.scan_rate_label = ttk.Label(stats_frame, text="Scans/Min: 0.0",
                                          font=('Arial', 11))
-        self.scan_info_label.pack(side=tk.RIGHT)
+        self.scan_rate_label.pack(anchor=tk.W)
 
-        # Letzter Scan
-        self.last_scan_label = ttk.Label(right_frame, text="Letzter Scan: -",
-                                         font=('Arial', 10))
-        self.last_scan_label.pack(pady=(5, 0))
+        # Manual Assignment (nur wenn manual mode)
+        self.manual_frame = ttk.LabelFrame(right_frame, text="Manuelle Zuordnung", padding="10")
+
+        manual_info = ttk.Label(self.manual_frame, text="Bei QR-Scan Benutzer auswählen:",
+                                font=('Arial', 10))
+        manual_info.pack(anchor=tk.W, pady=(0, 5))
+
+        self.quick_assign_frame = ttk.Frame(self.manual_frame)
+        self.quick_assign_frame.pack(fill=tk.X)
+
+        # Letzte Scans
+        recent_frame = ttk.LabelFrame(right_frame, text="Letzte QR-Codes", padding="10")
+        recent_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
+
+        # Recent scans liste
+        recent_columns = ('Zeit', 'Benutzer', 'QR-Code')
+        self.recent_tree = ttk.Treeview(recent_frame, columns=recent_columns, height=10, show='headings')
+
+        for col in recent_columns:
+            self.recent_tree.heading(col, text=col)
+
+        self.recent_tree.column('Zeit', width=80)
+        self.recent_tree.column('Benutzer', width=100)
+        self.recent_tree.column('QR-Code', width=150)
+
+        self.recent_tree.pack(fill=tk.BOTH, expand=True, pady=(0, 10))
+
+        # QR Assignment Buttons (dynamisch erstellt)
+        self.assignment_buttons_frame = ttk.Frame(right_frame)
+        self.assignment_buttons_frame.pack(fill=tk.X)
 
         # Bottom Info
-        info_frame = ttk.Frame(main_frame)
-        info_frame.pack(fill=tk.X, pady=(15, 0))
+        bottom_frame = ttk.Frame(main_frame)
+        bottom_frame.pack(fill=tk.X, pady=(15, 0))
 
-        self.info_label = ttk.Label(info_frame,
-                                    text="💡 RFID berühren = Anmelden + Du bist dran | Alle arbeiten parallel",
+        self.info_label = ttk.Label(bottom_frame,
+                                    text="💡 RFID scannen = Anmelden | Alle Benutzer können parallel alle Scanner nutzen",
                                     font=('Arial', 11), foreground='blue')
         self.info_label.pack()
 
     def auto_start(self):
-        """Startet automatisch Scanner und RFID Listener"""
+        """Startet automatisch alle Komponenten"""
         # RFID Listener starten
         self.hid_listener.start()
 
-        # QR Scanner nach kurzer Verzögerung starten
+        # Scanner verzögert starten
         threading.Thread(target=self._delayed_scanner_start, daemon=True).start()
 
         # Update Timer starten
         self.update_timer()
 
-        logger.info("Vereinfachte Multi-User App gestartet")
+        logger.info("Paralleles Multi-User Scanner System gestartet")
 
     def _delayed_scanner_start(self):
-        """Startet QR Scanner verzögert"""
+        """Startet Scanner verzögert"""
         time.sleep(2)
         try:
-            self.root.after(0, self._start_scanner)
+            self.root.after(0, self.start_all_scanners)
         except:
             pass
 
-    def _start_scanner(self):
-        """Startet den QR Scanner"""
+    def start_all_scanners(self):
+        """Startet alle verfügbaren Scanner"""
         try:
-            self.qr_scanner = QRScanner(
-                camera_index=APP_CONFIG.get('CAMERA_INDEX', 0),
-                callback=self.on_qr_scan,
-                video_label=self.video_label
-            )
-            self.qr_scanner.start()
-            self.scanner_running = True
+            # Versuche mehrere Kamera-Indizes
+            camera_indices = APP_CONFIG.get('CAMERA_INDICES', [0, 1, 2])
+            if not isinstance(camera_indices, list):
+                camera_indices = [APP_CONFIG.get('CAMERA_INDEX', 0)]
 
-            self.scan_button.config(text="Scanner stoppen", state='normal')
-            self.scanner_status_label.config(text="Scanner: Aktiv", foreground='green')
+            logger.info(f"Versuche Scanner für Kameras: {camera_indices}")
 
-            logger.info("QR Scanner gestartet")
+            for camera_index in camera_indices:
+                try:
+                    scanner = QRScanner(
+                        camera_index=camera_index,
+                        callback=self.on_qr_scan,
+                        video_label=self.video_label if camera_index == camera_indices[0] else None
+                    )
+                    scanner.start()
+                    self.scanners.append({
+                        'scanner': scanner,
+                        'index': camera_index,
+                        'status': 'active',
+                        'last_activity': datetime.now()
+                    })
+                    logger.info(f"Scanner {camera_index} erfolgreich gestartet")
+                except Exception as e:
+                    logger.warning(f"Scanner {camera_index} konnte nicht gestartet werden: {e}")
+
+            if self.scanners:
+                self.scanning_active = True
+                self.toggle_scanning_btn.config(text="Scanner stoppen")
+                self.scanning_status_label.config(text=f"Scanner: {len(self.scanners)} aktiv", foreground='green')
+                logger.info(f"{len(self.scanners)} Scanner gestartet")
+            else:
+                self.scanning_status_label.config(text="Scanner: Keine verfügbar", foreground='red')
+                logger.error("Keine Scanner verfügbar")
+
+            self.update_scanner_list()
 
         except Exception as e:
-            logger.error(f"Scanner Start Fehler: {e}")
-            self.scanner_status_label.config(text="Scanner: Fehler", foreground='red')
-            self.scan_button.config(text="Scanner starten", state='normal')
+            logger.error(f"Fehler beim Starten der Scanner: {e}")
+            self.scanning_status_label.config(text="Scanner: Fehler beim Start", foreground='red')
 
-    def toggle_scanner(self):
+    def toggle_scanning(self):
         """Scanner ein/aus schalten"""
-        if self.scanner_running:
-            self.stop_scanner()
+        if self.scanning_active:
+            self.stop_all_scanners()
         else:
-            self._start_scanner()
+            self.start_all_scanners()
 
-    def stop_scanner(self):
-        """Scanner stoppen"""
-        if self.qr_scanner:
-            self.qr_scanner.stop()
-            self.qr_scanner = None
+    def stop_all_scanners(self):
+        """Stoppt alle Scanner"""
+        for scanner_info in self.scanners:
+            try:
+                scanner_info['scanner'].stop()
+            except:
+                pass
 
-        self.scanner_running = False
-        self.scan_button.config(text="Scanner starten")
-        self.scanner_status_label.config(text="Scanner: Gestoppt", foreground='red')
+        self.scanners.clear()
+        self.scanning_active = False
+        self.toggle_scanning_btn.config(text="Scanner starten")
+        self.scanning_status_label.config(text="Scanner: Gestoppt", foreground='red')
         self.video_label.config(text="Scanner gestoppt")
+        self.update_scanner_list()
+        logger.info("Alle Scanner gestoppt")
+
+    def restart_scanners(self):
+        """Startet alle Scanner neu"""
+        self.stop_all_scanners()
+        time.sleep(1)
+        self.start_all_scanners()
+
+    def update_scanner_list(self):
+        """Aktualisiert die Scanner-Liste"""
+        # Scanner-Liste leeren
+        for item in self.scanner_tree.get_children():
+            self.scanner_tree.delete(item)
+
+        # Scanner hinzufügen
+        for scanner_info in self.scanners:
+            last_activity = scanner_info['last_activity'].strftime('%H:%M:%S')
+            self.scanner_tree.insert('', 'end', values=(
+                f"Kamera {scanner_info['index']}",
+                scanner_info['status'],
+                last_activity
+            ))
+
+        self.scanner_count_label.config(text=f"Verfügbare Scanner: {len(self.scanners)}")
 
     def on_rfid_scan(self, tag_id):
         """RFID Tag gescannt"""
@@ -232,14 +355,15 @@ class SimpleMultiUserApp:
 
         # Bereits angemeldet?
         if user_id in self.active_sessions:
-            # Setze als aktiven Benutzer
-            self.current_user_id = user_id
-            self.update_current_user_display()
-            self.show_message(f"⚡ {user_name} ist jetzt dran", "success")
-            logger.info(f"{user_name} als aktiver Benutzer gesetzt")
+            # Abmelden
+            self.logout_user(user_id)
         else:
-            # Neue Anmeldung
+            # Anmelden
             self.login_user(user)
+
+        # Merke letzten RFID Benutzer für last_rfid Modus
+        self.last_rfid_user = user_id
+        self.update_assignment_display()
 
     def login_user(self, user):
         """Benutzer anmelden"""
@@ -258,18 +382,16 @@ class SimpleMultiUserApp:
                 'session': session,
                 'user': user,
                 'scan_count': 0,
-                'start_time': datetime.now()
+                'start_time': datetime.now(),
+                'last_scan_time': None
             }
-
-            # Als aktiven Benutzer setzen
-            self.current_user_id = user_id
 
             # UI aktualisieren
             self.update_users_list()
-            self.update_current_user_display()
-            self.update_scan_counter()
+            self.update_assignment_buttons()
+            self.update_assignment_display()
 
-            self.show_message(f"✅ {user_name} angemeldet + ist dran", "success")
+            self.show_message(f"✅ {user_name} angemeldet", "success")
             logger.info(f"Benutzer angemeldet: {user_name}")
 
         except Exception as e:
@@ -312,18 +434,10 @@ class SimpleMultiUserApp:
             # Aus aktiven Sessions entfernen
             del self.active_sessions[user_id]
 
-            # Neuen aktiven Benutzer bestimmen
-            if self.current_user_id == user_id:
-                if self.active_sessions:
-                    # Ersten verfügbaren Benutzer als aktiv setzen
-                    self.current_user_id = next(iter(self.active_sessions.keys()))
-                else:
-                    self.current_user_id = None
-
             # UI aktualisieren
             self.update_users_list()
-            self.update_current_user_display()
-            self.update_scan_counter()
+            self.update_assignment_buttons()
+            self.update_assignment_display()
 
             self.show_message(f"👋 {user_name} abgemeldet", "info")
             logger.info(f"Benutzer abgemeldet: {user_name}")
@@ -332,41 +446,76 @@ class SimpleMultiUserApp:
             logger.error(f"Logout Fehler: {e}")
             self.show_message(f"Abmeldung fehlgeschlagen: {e}", "error")
 
-    def set_selected_active(self):
-        """Ausgewählten Benutzer als aktiv setzen"""
-        selection = self.users_tree.selection()
-        if not selection:
-            messagebox.showwarning("Keine Auswahl", "Bitte Benutzer auswählen")
+    def logout_all(self):
+        """Alle Benutzer abmelden"""
+        if not self.active_sessions:
+            messagebox.showinfo("Info", "Keine Benutzer angemeldet")
             return
 
-        try:
-            # User ID aus den Values holen
-            item = self.users_tree.item(selection[0])
-            values = item['values']
-            user_id = int(values[5])  # user_id ist an Position 5
-
-            if user_id in self.active_sessions:
-                self.current_user_id = user_id
-                self.update_users_list()
-                self.update_current_user_display()
-
-                user_name = self.active_sessions[user_id]['user']['BenutzerName']
-                self.show_message(f"⚡ {user_name} ist jetzt dran", "success")
-
-        except Exception as e:
-            logger.error(f"Aktivierung Fehler: {e}")
+        if messagebox.askyesno("Bestätigung", "Alle Benutzer abmelden?"):
+            for user_id in list(self.active_sessions.keys()):
+                self.logout_user(user_id)
 
     def on_qr_scan(self, payload):
-        """QR Code gescannt"""
-        if not self.current_user_id or self.current_user_id not in self.active_sessions:
-            self.show_message("⚠️ Niemand aktiv - RFID berühren", "warning")
+        """QR Code gescannt - automatische oder manuelle Zuordnung"""
+        if not self.active_sessions:
+            self.show_message("⚠️ Keine Benutzer angemeldet - RFID scannen", "warning")
             return
 
+        # Update Scanner-Aktivität
+        self.update_scanner_activity()
+
+        # Assignment-Modus bestimmen
+        assignment_mode = self.assignment_var.get()
+
+        if assignment_mode == "manual":
+            self.handle_manual_assignment(payload)
+        else:
+            self.handle_automatic_assignment(payload, assignment_mode)
+
+    def handle_automatic_assignment(self, payload, mode):
+        """Automatische QR-Code Zuordnung"""
+        try:
+            # Benutzer bestimmen
+            target_user_id = None
+
+            if mode == "round_robin":
+                # Round-robin zwischen allen angemeldeten Benutzern
+                user_ids = list(self.active_sessions.keys())
+                if user_ids:
+                    target_user_id = user_ids[self.round_robin_index % len(user_ids)]
+                    self.round_robin_index += 1
+
+            elif mode == "last_rfid":
+                # Letzter RFID-Benutzer
+                if self.last_rfid_user and self.last_rfid_user in self.active_sessions:
+                    target_user_id = self.last_rfid_user
+                else:
+                    # Fallback auf ersten verfügbaren
+                    target_user_id = next(iter(self.active_sessions.keys()), None)
+
+            if target_user_id:
+                self.assign_qr_to_user(payload, target_user_id)
+            else:
+                self.show_message("⚠️ Kein Benutzer für Zuordnung verfügbar", "warning")
+
+        except Exception as e:
+            logger.error(f"Automatische Zuordnung Fehler: {e}")
+            self.show_message(f"QR Zuordnung fehlgeschlagen: {e}", "error")
+
+    def handle_manual_assignment(self, payload):
+        """Manuelle QR-Code Zuordnung"""
+        self.pending_qr_assignment = payload
+        self.show_message(f"🔄 QR-Code bereit - Benutzer auswählen", "info")
+        self.update_assignment_buttons()
+
+    def assign_qr_to_user(self, payload, user_id):
+        """Ordnet QR-Code einem spezifischen Benutzer zu"""
         try:
             # Duplikat-Check
             from duplicate_prevention import check_qr_duplicate, register_qr_scan
 
-            session_id = self.active_sessions[self.current_user_id]['session']['ID']
+            session_id = self.active_sessions[user_id]['session']['ID']
             duplicate_check = check_qr_duplicate(payload, None)  # Global check
 
             if duplicate_check['is_duplicate']:
@@ -377,43 +526,121 @@ class SimpleMultiUserApp:
                     time_str = f"{remaining}s"
 
                 self.show_message(f"⚠️ Code bereits vor {time_str} gescannt", "warning")
-                self.last_scan_label.config(text=f"Duplikat: {datetime.now().strftime('%H:%M:%S')}",
-                                            foreground='red')
-                return
+                return False
 
             # QR Code speichern
             qr_scan = QrScan.create(session_id, payload)
             if not qr_scan:
                 self.show_message("Fehler beim Speichern", "error")
-                return
+                return False
 
             # Registrieren für Duplikat-Verhinderung
             register_qr_scan(payload, None)
 
             # Scan Count erhöhen
-            self.active_sessions[self.current_user_id]['scan_count'] += 1
+            self.active_sessions[user_id]['scan_count'] += 1
+            self.active_sessions[user_id]['last_scan_time'] = datetime.now()
             self.total_scans_today += 1
 
             # UI aktualisieren
             self.update_users_list()
-            self.update_scan_counter()
+            self.add_to_recent_scans(payload, user_id)
 
             # Feedback
-            user_name = self.active_sessions[self.current_user_id]['user']['BenutzerName']
+            user_name = self.active_sessions[user_id]['user']['BenutzerName']
             display_payload = payload[:40] + "..." if len(payload) > 40 else payload
 
             self.show_message(f"✅ Code für {user_name} gespeichert", "success")
-            self.last_scan_label.config(text=f"Gespeichert: {datetime.now().strftime('%H:%M:%S')} - {display_payload}",
-                                        foreground='green')
 
-            # Farbe nach 3 Sekunden zurücksetzen
-            self.root.after(3000, lambda: self.last_scan_label.config(foreground='black'))
+            # Pending assignment löschen
+            self.pending_qr_assignment = None
+            self.update_assignment_buttons()
 
             logger.info(f"QR Code für {user_name} gespeichert")
+            return True
 
         except Exception as e:
-            logger.error(f"QR Scan Fehler: {e}")
+            logger.error(f"QR Assignment Fehler: {e}")
             self.show_message(f"QR Fehler: {e}", "error")
+            return False
+
+    def update_scanner_activity(self):
+        """Aktualisiert Scanner-Aktivität"""
+        for scanner_info in self.scanners:
+            scanner_info['last_activity'] = datetime.now()
+        self.update_scanner_list()
+
+    def add_to_recent_scans(self, payload, user_id):
+        """Fügt Scan zur Recent-Liste hinzu"""
+        user_name = self.active_sessions[user_id]['user']['BenutzerName']
+        timestamp = datetime.now().strftime('%H:%M:%S')
+        display_payload = payload[:30] + "..." if len(payload) > 30 else payload
+
+        # Am Anfang hinzufügen
+        self.recent_tree.insert('', 0, values=(timestamp, user_name, display_payload))
+
+        # Nur die letzten 20 behalten
+        children = self.recent_tree.get_children()
+        if len(children) > 20:
+            for item in children[20:]:
+                self.recent_tree.delete(item)
+
+    def on_assignment_mode_changed(self, event=None):
+        """Assignment-Modus wurde geändert"""
+        self.qr_assignment_mode = self.assignment_var.get()
+        self.update_assignment_display()
+        self.update_assignment_buttons()
+
+        if self.qr_assignment_mode == "manual":
+            self.manual_frame.pack(fill=tk.X, pady=(10, 0))
+        else:
+            self.manual_frame.pack_forget()
+
+        logger.info(f"QR-Zuordnungsmodus geändert: {self.qr_assignment_mode}")
+
+    def update_assignment_display(self):
+        """Aktualisiert die Anzeige für nächste Zuordnung"""
+        mode = self.assignment_var.get()
+
+        if mode == "round_robin":
+            if self.active_sessions:
+                user_ids = list(self.active_sessions.keys())
+                next_user_id = user_ids[self.round_robin_index % len(user_ids)]
+                next_user_name = self.active_sessions[next_user_id]['user']['BenutzerName']
+                self.next_assignment_label.config(text=f"Nächster QR-Code: {next_user_name}")
+            else:
+                self.next_assignment_label.config(text="Nächster QR-Code: -")
+
+        elif mode == "last_rfid":
+            if self.last_rfid_user and self.last_rfid_user in self.active_sessions:
+                user_name = self.active_sessions[self.last_rfid_user]['user']['BenutzerName']
+                self.next_assignment_label.config(text=f"Nächster QR-Code: {user_name} (letzter RFID)")
+            else:
+                self.next_assignment_label.config(text="Nächster QR-Code: Ersten verfügbaren")
+
+        elif mode == "manual":
+            self.next_assignment_label.config(text="Nächster QR-Code: Manuelle Auswahl")
+
+    def update_assignment_buttons(self):
+        """Aktualisiert die manuellen Zuordnungs-Buttons"""
+        # Alte Buttons entfernen
+        for widget in self.assignment_buttons_frame.winfo_children():
+            widget.destroy()
+
+        if self.assignment_var.get() == "manual" and self.pending_qr_assignment:
+            ttk.Label(self.assignment_buttons_frame, text="QR-Code zuordnen an:",
+                      font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(0, 5))
+
+            for user_id, session_data in self.active_sessions.items():
+                user_name = session_data['user']['BenutzerName']
+                btn = ttk.Button(self.assignment_buttons_frame, text=user_name,
+                                 command=lambda uid=user_id: self.manual_assign_to_user(uid))
+                btn.pack(fill=tk.X, pady=1)
+
+    def manual_assign_to_user(self, user_id):
+        """Manuelle Zuordnung zu spezifischem Benutzer"""
+        if self.pending_qr_assignment:
+            self.assign_qr_to_user(self.pending_qr_assignment, user_id)
 
     def update_users_list(self):
         """Benutzerliste aktualisieren"""
@@ -436,40 +663,28 @@ class SimpleMultiUserApp:
             user = data['user']
             start_time = data['start_time']
             duration = int((datetime.now() - start_time).total_seconds())
+            last_scan = data['last_scan_time'].strftime('%H:%M:%S') if data['last_scan_time'] else '-'
 
-            # Status anzeigen
-            status = "⚡ Aktiv" if user_id == self.current_user_id else "○ Bereit"
-
-            tree_id = self.users_tree.insert('', 'end',
-                                             values=(
-                                                 status,
-                                                 user['BenutzerName'],
-                                                 start_time.strftime('%H:%M'),
-                                                 format_duration(duration),
-                                                 data['scan_count'],
-                                                 str(user_id)  # user_id als letzte Spalte
-                                             ))
+            tree_id = self.users_tree.insert('', 'end', values=(
+                user['BenutzerName'],
+                start_time.strftime('%H:%M'),
+                format_duration(duration),
+                data['scan_count'],
+                last_scan,
+                str(user_id)  # user_id als letzte Spalte
+            ))
 
             # Auswahl wiederherstellen
             if current_selection == str(user_id):
                 self.users_tree.selection_set(tree_id)
 
-    def update_current_user_display(self):
-        """Aktueller Benutzer Anzeige aktualisieren"""
-        if self.current_user_id and self.current_user_id in self.active_sessions:
-            user_name = self.active_sessions[self.current_user_id]['user']['BenutzerName']
-            self.current_user_label.config(text=f"⚡ {user_name}", foreground='green')
-        else:
-            self.current_user_label.config(text="Niemand - RFID berühren", foreground='red')
-
-    def update_scan_counter(self):
-        """Scan Counter aktualisieren"""
-        total = sum(data['scan_count'] for data in self.active_sessions.values())
-        self.scan_info_label.config(text=f"Heute: {total} Scans")
+        # Counter aktualisieren
+        count = len(self.active_sessions)
+        self.users_count_label.config(text=f"Angemeldete Benutzer: {count}")
 
     def update_timer(self):
         """Update Timer - läuft jede Sekunde"""
-        # Zeiten in der Liste aktualisieren
+        # Benutzer-Zeiten aktualisieren
         for item in self.users_tree.get_children():
             try:
                 values = self.users_tree.item(item)['values']
@@ -478,22 +693,24 @@ class SimpleMultiUserApp:
                 if user_id in self.active_sessions:
                     data = self.active_sessions[user_id]
                     duration = int((datetime.now() - data['start_time']).total_seconds())
-
-                    # Status Symbol
-                    status = "⚡ Aktiv" if user_id == self.current_user_id else "○ Bereit"
+                    last_scan = data['last_scan_time'].strftime('%H:%M:%S') if data['last_scan_time'] else '-'
 
                     # Alle Werte aktualisieren
                     new_values = (
-                        status,
                         data['user']['BenutzerName'],
                         data['start_time'].strftime('%H:%M'),
                         format_duration(duration),
                         data['scan_count'],
+                        last_scan,
                         str(user_id)
                     )
                     self.users_tree.item(item, values=new_values)
             except:
                 continue
+
+        # Statistiken aktualisieren
+        total_scans = sum(data['scan_count'] for data in self.active_sessions.values())
+        self.total_scans_label.config(text=f"Heutige Scans: {total_scans}")
 
         # Nächster Timer
         self.root.after(1000, self.update_timer)
@@ -510,11 +727,13 @@ class SimpleMultiUserApp:
         self.status_label.config(text=text, foreground=colors.get(msg_type, "black"))
         self.info_label.config(text=text, foreground=colors.get(msg_type, "blue"))
 
+        # Nach 5 Sekunden zurücksetzen
+        self.root.after(5000, lambda: self.status_label.config(text="System bereit", foreground="green"))
+
     def on_closing(self):
         """Beim Schließen aufräumen"""
         # Scanner stoppen
-        if self.qr_scanner:
-            self.qr_scanner.stop()
+        self.stop_all_scanners()
 
         # RFID Listener stoppen
         self.hid_listener.stop()
@@ -523,14 +742,14 @@ class SimpleMultiUserApp:
         for user_id in list(self.active_sessions.keys()):
             self.logout_user(user_id)
 
-        logger.info("App beendet")
+        logger.info("Paralleles System beendet")
         self.root.destroy()
 
 
 def main():
     """Hauptfunktion"""
     root = tk.Tk()
-    app = SimpleMultiUserApp(root)
+    app = ParallelMultiUserApp(root)
 
     # Schließen Handler
     root.protocol("WM_DELETE_WINDOW", app.on_closing)

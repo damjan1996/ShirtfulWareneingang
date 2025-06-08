@@ -1,13 +1,24 @@
-# RFID-Login & QR-Wareneingang
+# RFID-Login & QR-Wareneingang - Paralleles Multi-User System
 
-Minimalistische Desktop-Anwendung für Zeiterfassung und Wareneingang mit RFID und QR-Code Scanner.
+🚀 **Neu**: Alle Benutzer können jetzt parallel alle verfügbaren Scanner nutzen! 
 
-## 🎯 Features
+Erweiterte Desktop-Anwendung für Zeiterfassung und Wareneingang mit parallelem Multi-Scanner-Support.
+
+## ✨ Neue Features (Multi-Scanner System)
+
+- **🔄 Paralleles Scannen**: Alle angemeldeten Benutzer können gleichzeitig alle verfügbaren Scanner nutzen
+- **📸 Multi-Kamera-Support**: Unterstützung für mehrere USB-Kameras gleichzeitig
+- **🎯 Flexible QR-Zuordnung**: Round-Robin, manuelle Auswahl oder letzter RFID-Benutzer
+- **📊 Live-Scanner-Status**: Echtzeit-Übersicht über alle aktiven Scanner
+- **⚡ Optimierte Performance**: Intelligente Frame-Verarbeitung und Cross-Scanner Duplikat-Verhinderung
+- **🔧 Dynamische Steuerung**: Scanner können zur Laufzeit gestartet/gestoppt werden
+
+## 🎯 Core Features
 
 - **RFID-basiertes Login/Logout**: Mitarbeiter melden sich mit RFID-Tags an/ab
 - **Automatische Zeiterfassung**: Sessions werden in SQL Server gespeichert
-- **QR-Code Scanner**: Erfassung von Wareneingängen per Webcam
-- **Multi-User**: Mehrere Mitarbeiter können gleichzeitig angemeldet sein
+- **Multi-User parallel**: Mehrere Mitarbeiter können gleichzeitig arbeiten
+- **QR-Code Scanner**: Erfassung von Wareneingängen per Webcam(s)
 - **Echtzeit-Anzeige**: Live-Timer für aktive Sessions
 - **Direkte SQL-Anbindung**: Keine zusätzliche API notwendig
 
@@ -20,7 +31,7 @@ Minimalistische Desktop-Anwendung für Zeiterfassung und Wareneingang mit RFID u
 
 ### Hardware
 - USB RFID-Reader (HID-Modus, gibt Tag-ID + Enter aus)
-- Webcam für QR-Code Scanning
+- **1-4 Webcams** für QR-Code Scanning (Neu: Multi-Kamera Support!)
 
 ## 📦 Installation
 
@@ -40,13 +51,27 @@ venv\Scripts\activate
 pip install -r requirements.txt
 ```
 
-### 4. Konfiguration
-Kopieren Sie `.env.example` zu `.env` und passen Sie die Werte an:
+### 4. Konfiguration für Multi-Scanner System
+Kopieren Sie `.env.example` zu `.env` und konfigurieren Sie:
+
 ```env
+# Datenbank
 MSSQL_SERVER=116.202.224.248
 MSSQL_USER=sa
 MSSQL_PASSWORD=your_password
 MSSQL_DATABASE=RdScanner
+
+# Multi-Scanner Konfiguration (NEU!)
+CAMERA_INDICES=0,1,2                    # Mehrere Kameras
+QR_DEFAULT_ASSIGNMENT_MODE=round_robin   # Automatische Zuordnung
+SCANNER_VIDEO_DISPLAY=primary            # Video nur von erster Kamera
+MAX_SCANNERS=4                          # Max. gleichzeitige Scanner
+
+# Scanner-Optimierung
+SCANNER_FRAME_WIDTH=640
+SCANNER_FRAME_HEIGHT=480
+SCANNER_FPS=30
+SCANNER_COOLDOWN=0.5
 ```
 
 ### 5. Datenbank einrichten
@@ -61,74 +86,86 @@ python database/import_rfid_tags.py
 
 ## 🚀 Anwendung starten
 
-### Einfacher Start
-Doppelklick auf `run.bat`
-
-### Oder über Terminal
+### Paralleles Multi-User System (Empfohlen)
 ```bash
+# Mit System-Test (empfohlen beim ersten Start)
+run_parallel.bat
+
+# Oder direkt
 python app.py
 ```
 
-## 📱 Bedienung
-
-### Anmelden
-1. RFID-Tag an den Reader halten
-2. Benutzer erscheint in der linken Liste
-3. Timer startet automatisch
-
-### QR-Codes scannen
-1. Benutzer in der Liste auswählen
-2. "Scanner starten" klicken
-3. QR-Code vor die Kamera halten
-4. Erfasste Codes werden automatisch gespeichert
-
-### Abmelden
-- Entweder: Gleichen RFID-Tag erneut scannen
-- Oder: Benutzer auswählen und "Logout" klicken
-
-## 🗄️ Datenbankstruktur
-
-### Haupttabellen
-- **ScannBenutzer**: Mitarbeiterstammdaten mit RFID-Tags
-- **Sessions**: Arbeitszeitsessions (Start/Ende)
-- **QrScans**: Erfasste QR-Codes mit Zeitstempel
-
-### Erweiterte Tabellen (optional)
-- **ScannTyp**: Verschiedene Scan-Typen (Wareneingang, QK, etc.)
-- **ScannKopf**: Scan-Vorgänge
-- **ScannPosition**: Detaildaten zu Scans
-
-## 🧪 Tests
-
-### Komponenten testen
+### Klassische Versionen (noch verfügbar)
 ```bash
-# Datenbankverbindung testen
-python database/test_connection.py
+# Vereinfachte Version
+python app.py
 
-# RFID-Reader testen
-python hid_listener.py
-
-# QR-Scanner testen
-python qr_scanner.py
-
-# Alle Tests ausführen
-python -m pytest tests/
+# Tab-basierte Version  
+python app_tabs.py
 ```
 
-## 📝 QR-Code Formate
+## 📱 Bedienung - Paralleles System
 
-Die Anwendung erkennt verschiedene QR-Code Formate:
+### 🔑 Benutzer-Anmeldung
+1. **RFID-Tag scannen** → Benutzer wird angemeldet und erscheint in der Liste
+2. **Mehrere Benutzer** können gleichzeitig angemeldet sein
+3. **Erneuter RFID-Scan** → Benutzer wird abgemeldet
+
+### 📸 QR-Code Scanning (Parallel)
+1. **Automatisch (Round-Robin)**: QR-Codes werden automatisch reihum an alle angemeldeten Benutzer verteilt
+2. **Manuell**: Bei jedem QR-Code erscheint Auswahl für Benutzer-Zuordnung  
+3. **Letzter RFID**: QR-Codes gehen an den Benutzer, der zuletzt seinen RFID-Tag gescannt hat
+4. **Multi-Scanner**: Alle Kameras scannen parallel - egal welche Kamera den Code erkennt
+
+### ⚙️ Scanner-Verwaltung
+- **Live-Status**: Übersicht über alle aktiven Scanner
+- **Start/Stop**: Scanner können zur Laufzeit gestartet/gestoppt werden
+- **Automatischer Neustart**: Fehlerhafte Scanner werden automatisch neu gestartet
+- **Performance-Monitoring**: FPS und Scan-Statistiken pro Scanner
+
+## 🔧 Konfiguration
+
+### QR-Zuordnungsmodi
+
+| Modus | Beschreibung | Ideal für |
+|-------|--------------|-----------|
+| `round_robin` | Automatische Verteilung reihum | Gleichmäßige Arbeitsverteilung |
+| `manual` | Manuelle Auswahl bei jedem Scan | Spezifische Zuordnungen |
+| `last_rfid` | Zuordnung an letzten RFID-Benutzer | Ein Hauptbearbeiter |
+
+### Multi-Scanner Szenarien
+
+```env
+# Szenario 1: Einzelarbeitsplatz
+CAMERA_INDICES=0
+QR_DEFAULT_ASSIGNMENT_MODE=manual
+
+# Szenario 2: Team-Arbeitsplatz (2-3 Personen)  
+CAMERA_INDICES=0,1
+QR_DEFAULT_ASSIGNMENT_MODE=round_robin
+MAX_SCANNERS=2
+
+# Szenario 3: Hochdurchsatz-Station (4+ Personen)
+CAMERA_INDICES=0,1,2,3
+QR_DEFAULT_ASSIGNMENT_MODE=round_robin
+SCANNER_VIDEO_DISPLAY=none  # Kein Video für bessere Performance
+MAX_SCANNERS=4
+```
+
+## 📊 QR-Code Formate
+
+Das System erkennt automatisch verschiedene Formate:
 
 ### JSON Format
 ```json
 {
   "kunde": "ABC GmbH",
-  "auftrag": "12345",
+  "auftrag": "12345", 
   "paket": "1/3"
 }
 ```
 
-### Key-Value Format
+### Key-Value Format  
 ```
 Kunde:ABC GmbH^Auftrag:12345^Paket:1/3
 ```
@@ -138,36 +175,105 @@ Kunde:ABC GmbH^Auftrag:12345^Paket:1/3
 Beliebiger Text wird auch akzeptiert
 ```
 
+## 🧪 System-Test
+
+Führen Sie vor dem ersten Produktiveinsatz einen umfassenden Test durch:
+
+```bash
+python test_all_components.py
+```
+
+Der Test prüft:
+- ✅ Python-Module und Dependencies
+- ✅ Datenbank-Verbindung und Struktur  
+- ✅ RFID-Tags Import
+- ✅ **Multi-Kamera-Erkennung**
+- ✅ **Scanner-Performance**
+- ✅ Models und Konfiguration
+
 ## 🔧 Troubleshooting
 
-### RFID-Reader wird nicht erkannt
+### Multi-Scanner Probleme
+
+#### 🚫 Kameras werden nicht erkannt
+```env
+# Verschiedene Indizes testen
+CAMERA_INDICES=0,1,2,3
+
+# Backend wechseln  
+CAMERA_BACKEND=AUTO  # oder DSHOW, V4L2
+```
+
+#### 🐌 Langsame Performance mit mehreren Scannern
+```env
+# Auflösung reduzieren
+SCANNER_FRAME_WIDTH=320
+SCANNER_FRAME_HEIGHT=240
+
+# Frame-Skip erhöhen
+SCANNER_FRAME_SKIP=5
+
+# Video deaktivieren
+SCANNER_VIDEO_DISPLAY=none
+```
+
+#### ⚡ Zu viele QR-Code Duplikate
+```env
+# Globales Cooldown erhöhen
+QR_GLOBAL_COOLDOWN=600  # 10 Minuten
+
+# Cross-Scanner Check aktivieren
+QR_CROSS_USER_CHECK=True
+```
+
+### Klassische Probleme
+
+#### RFID-Reader wird nicht erkannt
 - Prüfen Sie ob der Reader im HID-Modus ist
 - Testen Sie mit einem Texteditor ob Tags ausgegeben werden
 
-### Kamera wird nicht gefunden
-- Prüfen Sie die CAMERA_INDEX Einstellung in .env
-- Standard ist 0, bei mehreren Kameras ggf. 1, 2, etc.
-
-### Datenbankverbindung schlägt fehl
+#### Datenbankverbindung schlägt fehl
 - ODBC Driver 18 installiert?
 - Firewall-Einstellungen prüfen
-- Server erreichbar? (ping)
+- Server erreichbar? (`ping 116.202.224.248`)
 
-## 📊 Logs
+## 📊 Logs und Monitoring
 
 Logs werden im `logs/` Verzeichnis gespeichert:
-- `MainApp_YYYYMMDD.log`: Hauptanwendung
+- `ParallelApp_YYYYMMDD.log`: Hauptanwendung
+- `QRScanner_YYYYMMDD.log`: Scanner-Events  
 - `Database_YYYYMMDD.log`: Datenbankoperationen
 - `HIDListener_YYYYMMDD.log`: RFID-Events
-- `QRScanner_YYYYMMDD.log`: QR-Scanner Events
+
+### Live-Monitoring
+- **Scanner-Status**: Echtzeit-Übersicht in der Anwendung
+- **Performance-Metriken**: FPS, Scan-Rate, Verarbeitungszeit
+- **Benutzer-Aktivität**: Live-Timer, Scan-Counts
+- **System-Statistiken**: Gesamtscans, aktive Sessions
+
+## 🆚 Version Comparison
+
+| Feature | Klassisch | **Parallel (NEU)** |
+|---------|-----------|---------------------|
+| Benutzer pro Scanner | 1 | ∞ |
+| Gleichzeitige Scanner | 1 | 1-4 |
+| QR-Zuordnung | Fest | Flexibel |
+| Live-Scanner-Status | ❌ | ✅ |
+| Cross-Scanner Duplikat-Check | ❌ | ✅ |
+| Performance-Monitoring | ❌ | ✅ |
 
 ## 🤝 Support
 
 Bei Fragen oder Problemen:
-1. Logs prüfen
-2. `python database/test_connection.py` ausführen
-3. Hardware-Verbindungen prüfen
+1. **System-Test ausführen**: `python test_all_components.py`
+2. **Logs prüfen** im `logs/` Verzeichnis
+3. **Konfiguration validieren**: `python config.py`
+4. **Hardware-Verbindungen prüfen**
 
 ## 📄 Lizenz
 
 Proprietär - Nur für den internen Gebrauch bei Shirtful
+
+---
+
+🎉 **Das parallele Multi-User System ermöglicht es jedem Mitarbeiter, jeden verfügbaren Scanner zu nutzen - maximale Flexibilität und Effizienz!**
