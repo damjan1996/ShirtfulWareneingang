@@ -80,7 +80,7 @@ class GUIComponentTests(unittest.TestCase):
             self.assertIsNotNone(app.assignment_var)
 
             # Prüfe initiale Werte
-            self.assertEqual(app.assignment_var.get(), "round_robin")
+            self.assertEqual(app.assignment_var.get(), "last_login")
 
     def test_user_list_management(self):
         """Test: Benutzer-Liste Verwaltung"""
@@ -182,6 +182,12 @@ class GUIComponentTests(unittest.TestCase):
             app.on_assignment_mode_changed()
 
             self.assertEqual(app.qr_assignment_mode, "last_rfid")
+
+            # Zurück zu last_login
+            app.assignment_var.set("last_login")
+            app.on_assignment_mode_changed()
+
+            self.assertEqual(app.qr_assignment_mode, "last_login")
 
     def test_status_message_display(self):
         """Test: Status-Nachrichten Anzeige"""
