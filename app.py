@@ -28,10 +28,25 @@ class ParallelMultiUserApp:
         self.root.geometry("1200x800")
         self.root.minsize(1000, 600)
 
+        # modern clean styling
+        self.root.configure(background='#f5f5f5')
+
+        style = ttk.Style()
+        style.theme_use('clam')
+        default_font = ('Helvetica', 11)
+        style.configure('.', font=default_font, background='#f5f5f5')
+        style.configure('TFrame', background='#f5f5f5')
+        style.configure('TLabelFrame', background='#f5f5f5')
+        style.configure('TLabelFrame.Label', background='#f5f5f5')
+        style.configure('Treeview', font=default_font, rowheight=24)
+        style.configure('Treeview.Heading', font=('Helvetica', 11, 'bold'))
+
         # State
         self.active_sessions = {}  # {user_id: session_data}
-        self.qr_assignment_mode = "round_robin"  # "round_robin", "manual", "last_rfid"
+        self.qr_assignment_mode = "last_login"  # "last_login", "round_robin", "manual", "last_rfid"
         self.last_rfid_user = None
+        self.last_login_user = None
+        self.login_order = []  # Reihenfolge der Anmeldungen
         self.round_robin_index = 0
         self.total_scans_today = 0
 
@@ -59,25 +74,36 @@ class ParallelMultiUserApp:
         header_frame = ttk.Frame(main_frame)
         header_frame.pack(fill=tk.X, pady=(0, 15))
 
-        title_label = ttk.Label(header_frame, text="Paralleles Multi-User Scanner System",
-                                font=('Arial', 18, 'bold'))
+        title_label = ttk.Label(
+            header_frame,
+            text="Paralleles Multi-User Scanner System",
+            font=('Helvetica', 18, 'bold')
+        )
         title_label.pack(side=tk.LEFT)
 
         # Status und Einstellungen
         settings_frame = ttk.Frame(header_frame)
         settings_frame.pack(side=tk.RIGHT)
 
-        ttk.Label(settings_frame, text="QR-Zuordnung:", font=('Arial', 10)).pack(side=tk.LEFT, padx=(0, 5))
+        ttk.Label(settings_frame, text="QR-Zuordnung:", font=('Helvetica', 10)).pack(side=tk.LEFT, padx=(0, 5))
 
         self.assignment_var = tk.StringVar(value=self.qr_assignment_mode)
-        assignment_combo = ttk.Combobox(settings_frame, textvariable=self.assignment_var,
-                                        values=["round_robin", "manual", "last_rfid"],
-                                        state="readonly", width=12)
+        assignment_combo = ttk.Combobox(
+            settings_frame,
+            textvariable=self.assignment_var,
+            values=["last_login", "round_robin", "manual", "last_rfid"],
+            state="readonly",
+            width=12,
+        )
         assignment_combo.pack(side=tk.LEFT, padx=(0, 10))
         assignment_combo.bind('<<ComboboxSelected>>', self.on_assignment_mode_changed)
 
-        self.status_label = ttk.Label(settings_frame, text="System bereit",
-                                      font=('Arial', 11), foreground='green')
+        self.status_label = ttk.Label(
+            settings_frame,
+            text="System bereit",
+            font=('Helvetica', 11),
+            foreground='green'
+        )
         self.status_label.pack(side=tk.LEFT)
 
         # Hauptbereich - 3 Spalten
@@ -92,12 +118,19 @@ class ParallelMultiUserApp:
         info_frame = ttk.Frame(left_frame)
         info_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.users_count_label = ttk.Label(info_frame, text="Angemeldete Benutzer: 0",
-                                           font=('Arial', 12, 'bold'))
+        self.users_count_label = ttk.Label(
+            info_frame,
+            text="Angemeldete Benutzer: 0",
+            font=('Helvetica', 12, 'bold')
+        )
         self.users_count_label.pack(anchor=tk.W)
 
-        self.next_assignment_label = ttk.Label(info_frame, text="Nächster QR-Code: -",
-                                               font=('Arial', 11), foreground='blue')
+        self.next_assignment_label = ttk.Label(
+            info_frame,
+            text="Nächster QR-Code: -",
+            font=('Helvetica', 11),
+            foreground='blue'
+        )
         self.next_assignment_label.pack(anchor=tk.W)
 
         # Benutzerliste
@@ -137,12 +170,18 @@ class ParallelMultiUserApp:
         scanner_info_frame = ttk.Frame(middle_frame)
         scanner_info_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.scanner_count_label = ttk.Label(scanner_info_frame, text="Verfügbare Scanner: 0",
-                                             font=('Arial', 12, 'bold'))
+        self.scanner_count_label = ttk.Label(
+            scanner_info_frame,
+            text="Verfügbare Scanner: 0",
+            font=('Helvetica', 12, 'bold')
+        )
         self.scanner_count_label.pack(anchor=tk.W)
 
-        self.scanning_status_label = ttk.Label(scanner_info_frame, text="Scanner: Initialisierung...",
-                                               font=('Arial', 11))
+        self.scanning_status_label = ttk.Label(
+            scanner_info_frame,
+            text="Scanner: Initialisierung...",
+            font=('Helvetica', 11)
+        )
         self.scanning_status_label.pack(anchor=tk.W)
 
         # Scanner-Liste
@@ -170,8 +209,13 @@ class ParallelMultiUserApp:
         video_frame = ttk.LabelFrame(middle_frame, text="Live Video", padding="5")
         video_frame.pack(fill=tk.BOTH, expand=True, pady=(10, 0))
 
-        self.video_label = ttk.Label(video_frame, text="Scanner wird gestartet...",
-                                     font=('Arial', 12), anchor=tk.CENTER, relief=tk.SUNKEN)
+        self.video_label = ttk.Label(
+            video_frame,
+            text="Scanner wird gestartet...",
+            font=('Helvetica', 12),
+            anchor=tk.CENTER,
+            relief=tk.SUNKEN
+        )
         self.video_label.pack(fill=tk.BOTH, expand=True)
 
         # Rechte Spalte - QR-Code Verwaltung (30%)
@@ -182,19 +226,28 @@ class ParallelMultiUserApp:
         stats_frame = ttk.Frame(right_frame)
         stats_frame.pack(fill=tk.X, pady=(0, 10))
 
-        self.total_scans_label = ttk.Label(stats_frame, text="Heutige Scans: 0",
-                                           font=('Arial', 12, 'bold'))
+        self.total_scans_label = ttk.Label(
+            stats_frame,
+            text="Heutige Scans: 0",
+            font=('Helvetica', 12, 'bold')
+        )
         self.total_scans_label.pack(anchor=tk.W)
 
-        self.scan_rate_label = ttk.Label(stats_frame, text="Scans/Min: 0.0",
-                                         font=('Arial', 11))
+        self.scan_rate_label = ttk.Label(
+            stats_frame,
+            text="Scans/Min: 0.0",
+            font=('Helvetica', 11)
+        )
         self.scan_rate_label.pack(anchor=tk.W)
 
         # Manual Assignment (nur wenn manual mode)
         self.manual_frame = ttk.LabelFrame(right_frame, text="Manuelle Zuordnung", padding="10")
 
-        manual_info = ttk.Label(self.manual_frame, text="Bei QR-Scan Benutzer auswählen:",
-                                font=('Arial', 10))
+        manual_info = ttk.Label(
+            self.manual_frame,
+            text="Bei QR-Scan Benutzer auswählen:",
+            font=('Helvetica', 10)
+        )
         manual_info.pack(anchor=tk.W, pady=(0, 5))
 
         self.quick_assign_frame = ttk.Frame(self.manual_frame)
@@ -225,9 +278,12 @@ class ParallelMultiUserApp:
         bottom_frame = ttk.Frame(main_frame)
         bottom_frame.pack(fill=tk.X, pady=(15, 0))
 
-        self.info_label = ttk.Label(bottom_frame,
-                                    text="💡 RFID scannen = Anmelden | Alle Benutzer können parallel alle Scanner nutzen",
-                                    font=('Arial', 11), foreground='blue')
+        self.info_label = ttk.Label(
+            bottom_frame,
+            text="💡 RFID scannen = Anmelden | Alle Benutzer können parallel alle Scanner nutzen",
+            font=('Helvetica', 11),
+            foreground='blue'
+        )
         self.info_label.pack()
 
     def auto_start(self):
@@ -385,6 +441,8 @@ class ParallelMultiUserApp:
                 'start_time': datetime.now(),
                 'last_scan_time': None
             }
+            self.last_login_user = user_id
+            self.login_order.append(user_id)
 
             # UI aktualisieren
             self.update_users_list()
@@ -433,6 +491,9 @@ class ParallelMultiUserApp:
 
             # Aus aktiven Sessions entfernen
             del self.active_sessions[user_id]
+            if user_id in self.login_order:
+                self.login_order.remove(user_id)
+            self.last_login_user = self.login_order[-1] if self.login_order else None
 
             # UI aktualisieren
             self.update_users_list()
@@ -479,7 +540,11 @@ class ParallelMultiUserApp:
             # Benutzer bestimmen
             target_user_id = None
 
-            if mode == "round_robin":
+            if mode == "last_login":
+                if self.last_login_user and self.last_login_user in self.active_sessions:
+                    target_user_id = self.last_login_user
+
+            elif mode == "round_robin":
                 # Round-robin zwischen allen angemeldeten Benutzern
                 user_ids = list(self.active_sessions.keys())
                 if user_ids:
@@ -602,7 +667,14 @@ class ParallelMultiUserApp:
         """Aktualisiert die Anzeige für nächste Zuordnung"""
         mode = self.assignment_var.get()
 
-        if mode == "round_robin":
+        if mode == "last_login":
+            if self.last_login_user and self.last_login_user in self.active_sessions:
+                user_name = self.active_sessions[self.last_login_user]['user']['BenutzerName']
+                self.next_assignment_label.config(text=f"Nächster QR-Code: {user_name} (letzter Login)")
+            else:
+                self.next_assignment_label.config(text="Nächster QR-Code: -")
+
+        elif mode == "round_robin":
             if self.active_sessions:
                 user_ids = list(self.active_sessions.keys())
                 next_user_id = user_ids[self.round_robin_index % len(user_ids)]
@@ -628,8 +700,11 @@ class ParallelMultiUserApp:
             widget.destroy()
 
         if self.assignment_var.get() == "manual" and self.pending_qr_assignment:
-            ttk.Label(self.assignment_buttons_frame, text="QR-Code zuordnen an:",
-                      font=('Arial', 10, 'bold')).pack(anchor=tk.W, pady=(0, 5))
+            ttk.Label(
+                self.assignment_buttons_frame,
+                text="QR-Code zuordnen an:",
+                font=('Helvetica', 10, 'bold')
+            ).pack(anchor=tk.W, pady=(0, 5))
 
             for user_id, session_data in self.active_sessions.items():
                 user_name = session_data['user']['BenutzerName']

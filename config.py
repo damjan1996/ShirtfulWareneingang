@@ -50,7 +50,7 @@ APP_CONFIG = {
 
 # QR-Code Assignment Konfiguration
 QR_ASSIGNMENT_CONFIG = {
-    'DEFAULT_MODE': os.getenv('QR_DEFAULT_ASSIGNMENT_MODE', 'round_robin'),  # round_robin, manual, last_rfid
+    'DEFAULT_MODE': os.getenv('QR_DEFAULT_ASSIGNMENT_MODE', 'last_login'),  # last_login, round_robin, manual, last_rfid
     'AUTO_ASSIGN_TIMEOUT': int(os.getenv('QR_AUTO_ASSIGN_TIMEOUT', '10')),  # Sekunden für manuelle Auswahl
     'ROUND_ROBIN_RESET': os.getenv('QR_ROUND_ROBIN_RESET', 'session').lower(),  # session, daily, never
 }
@@ -147,7 +147,7 @@ def validate_config():
         warnings.append(f"CAMERA_BACKEND '{APP_CONFIG['CAMERA_BACKEND']}' unbekannt")
 
     # QR-Assignment Konfiguration prüfen
-    if QR_ASSIGNMENT_CONFIG['DEFAULT_MODE'] not in ['round_robin', 'manual', 'last_rfid']:
+    if QR_ASSIGNMENT_CONFIG['DEFAULT_MODE'] not in ['last_login', 'round_robin', 'manual', 'last_rfid']:
         errors.append(f"QR_DEFAULT_ASSIGNMENT_MODE '{QR_ASSIGNMENT_CONFIG['DEFAULT_MODE']}' ungültig")
 
     if QR_ASSIGNMENT_CONFIG['AUTO_ASSIGN_TIMEOUT'] < 1 or QR_ASSIGNMENT_CONFIG['AUTO_ASSIGN_TIMEOUT'] > 60:

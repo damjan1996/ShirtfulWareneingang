@@ -8,10 +8,11 @@ Erweiterte Desktop-Anwendung für Zeiterfassung und Wareneingang mit parallelem 
 
 - **🔄 Paralleles Scannen**: Alle angemeldeten Benutzer können gleichzeitig alle verfügbaren Scanner nutzen
 - **📸 Multi-Kamera-Support**: Unterstützung für mehrere USB-Kameras gleichzeitig
-- **🎯 Flexible QR-Zuordnung**: Round-Robin, manuelle Auswahl oder letzter RFID-Benutzer
+- **🎯 Flexible QR-Zuordnung**: Last-Login (Standard), Round-Robin, manuelle Auswahl oder letzter RFID-Benutzer
 - **📊 Live-Scanner-Status**: Echtzeit-Übersicht über alle aktiven Scanner
 - **⚡ Optimierte Performance**: Intelligente Frame-Verarbeitung und Cross-Scanner Duplikat-Verhinderung
 - **🔧 Dynamische Steuerung**: Scanner können zur Laufzeit gestartet/gestoppt werden
+- **🎨 Modernes UI-Design**: Helles Farbschema und klare Helvetica-Schrift
 
 ## 🎯 Core Features
 
@@ -63,7 +64,7 @@ MSSQL_DATABASE=RdScanner
 
 # Multi-Scanner Konfiguration (NEU!)
 CAMERA_INDICES=0,1,2                    # Mehrere Kameras
-QR_DEFAULT_ASSIGNMENT_MODE=round_robin   # Automatische Zuordnung
+QR_DEFAULT_ASSIGNMENT_MODE=last_login   # Scans an letzten Login
 SCANNER_VIDEO_DISPLAY=primary            # Video nur von erster Kamera
 MAX_SCANNERS=4                          # Max. gleichzeitige Scanner
 
@@ -129,6 +130,7 @@ python app_tabs.py
 
 | Modus | Beschreibung | Ideal für |
 |-------|--------------|-----------|
+| `last_login` | Alle Scans an zuletzt angemeldeten Benutzer | Einfaches Einzelarbeitsplatz |
 | `round_robin` | Automatische Verteilung reihum | Gleichmäßige Arbeitsverteilung |
 | `manual` | Manuelle Auswahl bei jedem Scan | Spezifische Zuordnungen |
 | `last_rfid` | Zuordnung an letzten RFID-Benutzer | Ein Hauptbearbeiter |
@@ -138,7 +140,7 @@ python app_tabs.py
 ```env
 # Szenario 1: Einzelarbeitsplatz
 CAMERA_INDICES=0
-QR_DEFAULT_ASSIGNMENT_MODE=manual
+QR_DEFAULT_ASSIGNMENT_MODE=last_login
 
 # Szenario 2: Team-Arbeitsplatz (2-3 Personen)  
 CAMERA_INDICES=0,1

@@ -55,15 +55,24 @@ class UserTab:
         info_frame = ttk.Frame(header_frame)
         info_frame.pack(side=tk.LEFT)
 
-        ttk.Label(info_frame, text=f"Benutzer: {self.user['BenutzerName']}",
-                  font=('Arial', 14, 'bold')).pack(anchor=tk.W)
+        ttk.Label(
+            info_frame,
+            text=f"Benutzer: {self.user['BenutzerName']}",
+            font=('Helvetica', 14, 'bold')
+        ).pack(anchor=tk.W)
 
-        self.timer_label = ttk.Label(info_frame, text="Zeit: 00:00:00",
-                                     font=('Arial', 12))
+        self.timer_label = ttk.Label(
+            info_frame,
+            text="Zeit: 00:00:00",
+            font=('Helvetica', 12)
+        )
         self.timer_label.pack(anchor=tk.W)
 
-        self.scan_count_label = ttk.Label(info_frame, text="Scans: 0",
-                                          font=('Arial', 12))
+        self.scan_count_label = ttk.Label(
+            info_frame,
+            text="Scans: 0",
+            font=('Helvetica', 12)
+        )
         self.scan_count_label.pack(anchor=tk.W)
 
         # Rechts: Logout Button
@@ -75,9 +84,12 @@ class UserTab:
         scanner_frame.pack(fill=tk.BOTH, expand=True)
 
         # Video Label
-        self.video_label = ttk.Label(scanner_frame,
-                                     text="Wählen Sie diesen Tab aus um zu scannen",
-                                     font=('Arial', 12), anchor=tk.CENTER)
+        self.video_label = ttk.Label(
+            scanner_frame,
+            text="Wählen Sie diesen Tab aus um zu scannen",
+            font=('Helvetica', 12),
+            anchor=tk.CENTER
+        )
         self.video_label.pack(fill=tk.BOTH, expand=True)
 
         # Status Bar
@@ -171,6 +183,19 @@ class MainApplication:
         self.root.geometry("1200x800")
         self.root.minsize(800, 600)
 
+        # modern clean styling
+        self.root.configure(background='#f5f5f5')
+
+        style = ttk.Style()
+        style.theme_use('clam')
+        default_font = ('Helvetica', 11)
+        style.configure('.', font=default_font, background='#f5f5f5')
+        style.configure('TFrame', background='#f5f5f5')
+        style.configure('TLabelFrame', background='#f5f5f5')
+        style.configure('TLabelFrame.Label', background='#f5f5f5')
+        style.configure('Treeview', font=default_font, rowheight=24)
+        style.configure('Treeview.Heading', font=('Helvetica', 11, 'bold'))
+
         # State
         self.active_sessions = {}  # {user_id: {'session': ..., 'tab': UserTab}}
         self.current_tab = None
@@ -198,19 +223,26 @@ class MainApplication:
         header_frame = ttk.Frame(main_frame)
         header_frame.pack(fill=tk.X, pady=(0, 5))
 
-        ttk.Label(header_frame, text="RFID & QR Scanner System",
-                  font=('Arial', 16, 'bold')).pack(side=tk.LEFT)
+        ttk.Label(
+            header_frame,
+            text="RFID & QR Scanner System",
+            font=('Helvetica', 16, 'bold')
+        ).pack(side=tk.LEFT)
 
         # RFID Status
-        self.rfid_status = ttk.Label(header_frame,
-                                     text="RFID-Reader bereit",
-                                     font=('Arial', 11))
+        self.rfid_status = ttk.Label(
+            header_frame,
+            text="RFID-Reader bereit",
+            font=('Helvetica', 11)
+        )
         self.rfid_status.pack(side=tk.RIGHT, padx=10)
 
         # Scanner Status
-        self.scanner_status = ttk.Label(header_frame,
-                                        text="Scanner: Initialisierung...",
-                                        font=('Arial', 11))
+        self.scanner_status = ttk.Label(
+            header_frame,
+            text="Scanner: Initialisierung...",
+            font=('Helvetica', 11)
+        )
         self.scanner_status.pack(side=tk.RIGHT, padx=10)
 
         # Notebook für Tabs
@@ -230,15 +262,19 @@ class MainApplication:
         status_frame = ttk.Frame(main_frame)
         status_frame.pack(fill=tk.X, pady=(5, 0))
 
-        self.status_label = ttk.Label(status_frame,
-                                      text="Bereit - Halten Sie Ihren RFID-Tag an den Reader",
-                                      font=('Arial', 11))
+        self.status_label = ttk.Label(
+            status_frame,
+            text="Bereit - Halten Sie Ihren RFID-Tag an den Reader",
+            font=('Helvetica', 11)
+        )
         self.status_label.pack(side=tk.LEFT)
 
         # Aktive Benutzer Zähler
-        self.user_count_label = ttk.Label(status_frame,
-                                          text="Aktive Benutzer: 0",
-                                          font=('Arial', 11))
+        self.user_count_label = ttk.Label(
+            status_frame,
+            text="Aktive Benutzer: 0",
+            font=('Helvetica', 11)
+        )
         self.user_count_label.pack(side=tk.RIGHT)
 
     def setup_start_tab(self):
@@ -247,8 +283,11 @@ class MainApplication:
         content.pack(fill=tk.BOTH, expand=True)
 
         # Willkommen
-        ttk.Label(content, text="Willkommen zum Multi-User Scanner System",
-                  font=('Arial', 18, 'bold')).pack(pady=(0, 20))
+        ttk.Label(
+            content,
+            text="Willkommen zum Multi-User Scanner System",
+            font=('Helvetica', 18, 'bold')
+        ).pack(pady=(0, 20))
 
         # Anleitung
         instructions = ttk.LabelFrame(content, text="Anleitung", padding="15")
@@ -270,14 +309,18 @@ class MainApplication:
 Mehrere Benutzer können gleichzeitig eingeloggt sein!
 Der Scanner wird zwischen den Tabs geteilt."""
 
-        ttk.Label(instructions, text=instruction_text,
-                  font=('Arial', 12), justify=tk.LEFT).pack()
+        ttk.Label(
+            instructions,
+            text=instruction_text,
+            font=('Helvetica', 12),
+            justify=tk.LEFT
+        ).pack()
 
         # Aktive Benutzer Liste
         active_frame = ttk.LabelFrame(content, text="Aktive Benutzer", padding="10")
         active_frame.pack(fill=tk.BOTH, expand=True)
 
-        self.active_listbox = tk.Listbox(active_frame, height=8, font=('Arial', 11))
+        self.active_listbox = tk.Listbox(active_frame, height=8, font=('Helvetica', 11))
         self.active_listbox.pack(fill=tk.BOTH, expand=True)
 
         # Update Timer
